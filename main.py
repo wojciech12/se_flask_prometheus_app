@@ -1,22 +1,20 @@
 from flask import Flask, Response
-from flask import request, abort
-from prometheus_client import (Summary, generate_latest, Histogram)
+from flask import request
+from prometheus_client import (Summary, generate_latest)
 import ast
 
 
 class MetricCollector:
 
     def observe_myself(self, path, method, status_code, duration):
-        self._me.labels(path=path, method=method, status_code=status_code).observe(duration)
-
+        self._me.labels(path=path, method=method,
+                        status_code=status_code).observe(duration)
 
     def observe_db(self, status_code, duration):
         self._db.labels(status_code=status_code).observe(duration)
 
-
     def observe_external(self, status_code, duration):
         self._external.labels(status_code=status_code).observe(duration)
-
 
     def get_latest(self):
         return generate_latest()
@@ -26,19 +24,24 @@ class MetricCollector:
         prefix = service_name.replace("-", "_")
         STATUS_CODE = 'status_code'
         PATH = 'path'
-        HTTP_METHOD= 'method'
+        HTTP_METHOD = 'method'
 
         # we could also collect the method when we have a REST interface
-        about_me = Summary(prefix + "_duration_seconds", service_name + " latency request distribution", [PATH, HTTP_METHOD, STATUS_CODE])
-        about_db = Summary(prefix + "_database_duration_seconds", "database latency request distribution", [STATUS_CODE])
-        about_her = Summary(prefix + "_audit_duration_seconds", "audit srv latency request distribution", [STATUS_CODE])
+        about_me = Summary(prefix + "_duration_seconds",
+                           service_name + " latency request distribution",
+                           [PATH, HTTP_METHOD, STATUS_CODE])
+        about_db = Summary(prefix + "_database_duration_seconds",
+                           "database latency request distribution",
+                           [STATUS_CODE])
+        about_her = Summary(prefix + "_audit_duration_seconds",
+                            "audit service latency request distribution",
+                            [STATUS_CODE])
 
         mc = MetricCollector()
         mc._me = about_me
         mc._ab = about_db
         mc._external = about_her
         return mc
-
 
 
 def get_collector(name):
@@ -50,7 +53,7 @@ def get_app():
     return app
 
 
-def add_routes(app,  collector): 
+def add_routes(app,  collector):
     @app.route('/hello')
     def hello_route():
         return 'hello'
@@ -64,23 +67,25 @@ def add_routes(app,  collector):
         # getting data from db
         try:
             db_sleep = int(request.args.get("db_sleep", 0))
-            is_db_error = ast.literal_eval(request.args.get("is_db_error", "False"))
+            is_db_error = ast.literal_eval(
+                request.args.get("is_db_error", "False"))
 
             call_db(db_sleep, is_db_error)
         except RuntimeError as re:
             r = Response("{0}".format(re), mimetype='text/plain')
-            r.status_code=500
+            r.status_code = 500
             return r
 
         # calling an external service
         try:
             srv_sleep = int(request.args.get("srv_sleep", 0))
-            is_srv_error = ast.literal_eval(request.args.get("is_srv_error", "False"))
+            is_srv_error = ast.literal_eval(
+                request.args.get("is_srv_error", "False"))
 
             call_external(srv_sleep, is_srv_error)
         except RuntimeError as re:
             r = Response("{0}".format(re), mimetype='text/plain')
-            r.status_code=500
+            r.status_code = 500
             return r
 
         return 'Success!'
@@ -104,13 +109,16 @@ def mocked_call(what, sleep, is_error):
 
 def instrument_requests(app, collector):
     import time
-    
+
     def before():
         request.start_time = time.time()
-    
+
     def after(response):
         request_latency = time.time() - request.start_time
-        collector.observe_myself(request.path, request.method, response.status_code, request_latency)
+        collector.observe_myself(request.path,
+                                 request.method,
+                                 response.status_code,
+                                 request_latency)
         return response
 
     app.before_request(before)
